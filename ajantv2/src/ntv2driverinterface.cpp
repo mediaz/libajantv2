@@ -1037,12 +1037,21 @@ bool CNTV2DriverInterface::AcquireStreamForApplicationWithReference (const ULWor
 			if (!WriteRegister(kVRegApplicationCode, inAppCode))
 				return false;
 			// Just in case this is not zero
+#if defined(AJA_WINDOWS)
+			WriteRegister(kVRegAcquireReferenceCount, 0);
+			WriteRegister(kVRegAcquireReferenceCount, 1);
+#elif defined(AJA_LINUX)
 			WriteRegister(kVRegAcquireLinuxReferenceCount, 0);
 			WriteRegister(kVRegAcquireLinuxReferenceCount, 1);
+#endif
 			return WriteRegister(kVRegApplicationPID, ULWord(inProcessID));
 		}
 		else if (currentCode == inAppCode  &&  currentPID == ULWord(inProcessID))
+#if defined(AJA_WINDOWS)
+			return WriteRegister(kVRegAcquireReferenceCount, 1);	// Process already acquired, so bump the count
+#elif defined(AJA_LINUX)
 			return WriteRegister(kVRegAcquireLinuxReferenceCount, 1);	// Process already acquired, so bump the count
+#endif
 		// Someone else has the board, so wait and try again
 		AJATime::Sleep(50);
 	}
@@ -1054,13 +1063,23 @@ bool CNTV2DriverInterface::ReleaseStreamForApplicationWithReference (const ULWor
 	ULWord currentCode(0), currentPID(0), currentCount(0);
 	if (!ReadRegister(kVRegApplicationCode, currentCode)
 		|| !ReadRegister(kVRegApplicationPID, currentPID)
+#if defined(AJA_WINDOWS)
+		|| !ReadRegister(kVRegAcquireReferenceCount, currentCount))
+#elif defined(AJA_LINUX)
 		|| !ReadRegister(kVRegAcquireLinuxReferenceCount, currentCount))
+#endif
 			return false;
 
 	if (currentCode == inAppCode  &&  currentPID == ULWord(inProcessID))
 	{
 		if (currentCount > 1)
+		{
+#if defined(AJA_WINDOWS)
+			return WriteRegister(kVRegReleaseReferenceCount, 1);
+#elif defined(AJA_LINUX)
 			return WriteRegister(kVRegReleaseLinuxReferenceCount, 1);
+#endif
+		}
 		if (currentCount == 1)
 			return ReleaseStreamForApplication(inAppCode, inProcessID);
 		return true;
@@ -1109,7 +1128,11 @@ bool CNTV2DriverInterface::ReleaseStreamForApplication (const ULWord inAppCode, 
 {	(void)inAppCode;	//	Don't care which appCode
 	if (WriteRegister(kVRegReleaseApplication, ULWord(inProcessID)))
 	{
+#if defined(AJA_WINDOWS)
+		WriteRegister(kVRegAcquireReferenceCount, 0);
+#elif defined(AJA_LINUX)
 		WriteRegister(kVRegAcquireLinuxReferenceCount, 0);
+#endif
 		return true;	// We don't care if the above call failed
 	}
 	return false;
